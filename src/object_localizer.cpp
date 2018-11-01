@@ -9,41 +9,34 @@
 #include <geometry_msgs/TransformStamped.h>
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/Int8.h>
+#include <actionlib/client/simple_action_client.h>
+#include <actionlib/server/simple_action_server.h>
 
 #include <darknet_ros_msgs/BoundingBoxes.h>
 #include <darknet_ros_msgs/BoundingBox.h>
+#include <darknet_ros_msgs/CheckForObjectsAction.h>
 
 #include <cv_bridge/cv_bridge.h>
 #include <image_geometry/pinhole_camera_model.h>
 
 #include <turtle_pick/Object.h>
 #include <turtle_pick/Objects.h>
+#include <turtle_pick/DetectLocalize.h>
 
 class ObjectLocalizer
 {
   public:
-    ObjectLocalizer(ros::NodeHandle n) : nh_(n), yolo_msgs_(new darknet_ros_msgs::BoundingBoxes), depth_msgs_(new sensor_msgs::Image), depth_img_cv_(new cv_bridge::CvImage)
+    ObjectLocalizer(ros::NodeHandle n) : nh_(n), depth_img_cv_(new cv_bridge::CvImage), check_for_objects_ac_("/darknet_ros/check_for_objects/", true)
     {
         info_sub_ = nh_.subscribe("/camera/rgb/camera_info", 10, &ObjectLocalizer::infoCB, this);
-        depth_image_sub_ = nh_.subscribe("/camera/depth_registered/image_raw", 10, &ObjectLocalizer::depthCB, this);
-        yolo_sub_ = nh_.subscribe<darknet_ros_msgs::BoundingBoxes>("/darknet_ros/bounding_boxes", 1, &ObjectLocalizer::yoloCB, this);
         marker_pub_ = nh_.advertise<visualization_msgs::Marker>("objects_marker", 10);
         location_pub_ = nh_.advertise<turtle_pick::Objects>("objects_location", 10);
+        localize_server_ = nh_.advertiseService("detect_and_localize", &ObjectLocalizer::detect_localize_CB, this);
     }
 
     void infoCB(const sensor_msgs::CameraInfoConstPtr &msg)
     {
         model1_.fromCameraInfo(msg);
-    }
-
-    void yoloCB(const darknet_ros_msgs::BoundingBoxesConstPtr &msg)
-    {
-        yolo_msgs_ = msg;
-    }
-
-    void depthCB(const sensor_msgs::ImageConstPtr &msg)
-    {
-        depth_img_cv_ = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::TYPE_16UC1);
     }
 
     geometry_msgs::Point get_coordinate(int pixel_x, int pixel_y)
@@ -61,10 +54,8 @@ class ObjectLocalizer
         // get coordiante of object in map frame
         tf::TransformListener listener;
         tf::StampedTransform stampedtransform;
-        // listener.waitForTransform("/map", "/camera_rgb_optical_frame", ros::Time::now(), ros::Duration(3.0));
-        // listener.lookupTransform("/map", "/camera_rgb_optical_frame", ros::Time(0), stampedtransform);
-        listener.waitForTransform("/camera_rgb_optical_frame", "/camera_rgb_optical_frame", ros::Time::now(), ros::Duration(3.0));
-        listener.lookupTransform("/camera_rgb_optical_frame", "/camera_rgb_optical_frame", ros::Time(0), stampedtransform);
+        listener.waitForTransform("/map", "/camera_rgb_optical_frame", ros::Time::now(), ros::Duration(3.0));
+        listener.lookupTransform("/map", "/camera_rgb_optical_frame", ros::Time(0), stampedtransform);
         tf::Transform transform;
         transform.setOrigin(tf::Vector3(coordiante_camera_frame.x, coordiante_camera_frame.y, coordiante_camera_frame.z));
         tf::Transform ntransform;
@@ -78,11 +69,16 @@ class ObjectLocalizer
 
     bool marker_publish(turtle_pick::Objects objects_to_be_pub)
     {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "/map";
+        marker.header.stamp = ros::Time();
+        marker.ns = "detected_objects";
+        marker.action = visualization_msgs::Marker::DELETEALL;
+        marker_pub_.publish(marker);
         for (int i = 0; i < objects_to_be_pub.objects.size(); i++)
         {
             visualization_msgs::Marker marker;
-            // marker.header.frame_id = "/map";
-            marker.header.frame_id = "/camera_rgb_optical_frame";
+            marker.header.frame_id = "/map";
             marker.header.stamp = ros::Time();
             marker.ns = "detected_objects";
             marker.action = visualization_msgs::Marker::ADD;
@@ -101,63 +97,96 @@ class ObjectLocalizer
         return true;
     }
 
-    void pub_locations()
+    bool detect_localize_CB(turtle_pick::DetectLocalize::Request &req,
+                            turtle_pick::DetectLocalize::Response &res)
     {
-        detected_objects.objects.resize(0);
-        int size = yolo_msgs_->bounding_boxes.size();
-        int pixel_x, pixel_y;
-        turtle_pick::Object single_object;
-        ROS_INFO("%d objects detected, now localizing", size);
-        for (int i = 0; i < size; i++)
+        // get latest rgb image and depth image
+        boost::shared_ptr<sensor_msgs::Image const> sharedPtr;
+        sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/rgb/image_raw", ros::Duration(10));
+        if (sharedPtr == NULL)
         {
-            pixel_x = (yolo_msgs_->bounding_boxes[i].xmin + yolo_msgs_->bounding_boxes[i].xmax) / 2;
-            pixel_y = (yolo_msgs_->bounding_boxes[i].ymin + yolo_msgs_->bounding_boxes[i].ymax) / 2;
-            single_object.position = this->get_coordinate(pixel_x, pixel_y);
-            single_object.Class = yolo_msgs_->bounding_boxes[i].Class;
-            detected_objects.objects.push_back(single_object);
+            ROS_INFO("No RGB image received");
+            return false;
         }
-        // publish marker for visulization
-        if (size > 0)
+        else
+            rgb_image_ = *sharedPtr;
+        sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/depth/image_raw", ros::Duration(10));
+        if (sharedPtr == NULL)
         {
-            if (!this->marker_publish(detected_objects))
+            ROS_INFO("No depth image received");
+            return false;
+        }
+        else
+        {
+            depth_image_ = *sharedPtr;
+            depth_img_cv_ = cv_bridge::toCvCopy(depth_image_, sensor_msgs::image_encodings::TYPE_16UC1);
+        }
+        // call YOLO action and localize detection results
+        darknet_ros_msgs::CheckForObjectsGoal yolo_ac_goal;
+        yolo_ac_goal.image = rgb_image_;
+        check_for_objects_ac_.sendGoal(yolo_ac_goal);
+        check_for_objects_ac_.waitForResult();
+        if (check_for_objects_ac_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
+        {
+            darknet_ros_msgs::CheckForObjectsResult yolo_ac_result = *check_for_objects_ac_.getResult();
+            yolo_results_ = yolo_ac_result.bounding_boxes;
+            detected_objects_.objects.resize(0);
+            int size = yolo_results_.bounding_boxes.size();
+            int pixel_x, pixel_y;
+            turtle_pick::Object single_object;
+            ROS_INFO("%d objects detected, now localizing", size);
+            for (int i = 0; i < size; i++)
             {
-                ROS_INFO("Failed publishing RViz markers");
+                pixel_x = (yolo_results_.bounding_boxes[i].xmin + yolo_results_.bounding_boxes[i].xmax) / 2;
+                pixel_y = (yolo_results_.bounding_boxes[i].ymin + yolo_results_.bounding_boxes[i].ymax) / 2;
+                single_object.position = this->get_coordinate(pixel_x, pixel_y);
+                single_object.Class = yolo_results_.bounding_boxes[i].Class;
+                detected_objects_.objects.push_back(single_object);
             }
+            // publish marker for visulization
+            if (size > 0)
+            {
+                if (!this->marker_publish(detected_objects_))
+                {
+                    ROS_INFO("Failed publishing RViz markers");
+                    return false;
+                }
+            }
+            // publish location msgs
+            location_pub_.publish(detected_objects_);
+            res.objects = detected_objects_;
+            return true;
         }
-        // publish location msgs
-        location_pub_.publish(detected_objects);
+        else
+        {
+            ROS_INFO("Failed call YOLO detection action");
+            return false;
+        }
     }
 
   private:
     ros::NodeHandle nh_;
-    ros::Subscriber info_sub_, depth_image_sub_, yolo_sub_, yolo_number_sub_;
+    ros::Subscriber info_sub_;
+    ros::ServiceServer localize_server_;
     ros::Publisher location_pub_, marker_pub_;
     image_geometry::PinholeCameraModel model1_;
+    sensor_msgs::Image rgb_image_, depth_image_;
 
-    darknet_ros_msgs::BoundingBoxesConstPtr yolo_msgs_;
-    sensor_msgs::ImageConstPtr depth_msgs_;
+    darknet_ros_msgs::BoundingBoxes yolo_results_;
     cv_bridge::CvImagePtr depth_img_cv_;
 
-    turtle_pick::Objects detected_objects;
+    turtle_pick::Objects detected_objects_;
 
-    std::vector<cv::Point3d> coordinate_camera_;
-
+    actionlib::SimpleActionClient<darknet_ros_msgs::CheckForObjectsAction> check_for_objects_ac_;
 };
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "object_localizing");
+    ros::init(argc, argv, "object_localize");
     ros::NodeHandle n("~");
     ObjectLocalizer object_localizer(n);
-    ros::Rate loop_rate(20); // 10 Hz
-    ros::Duration(2).sleep();
-    ros::spinOnce();
-    ROS_INFO("Objects Localizing Initialized!");
-    while (ros::ok())
-    {
-        object_localizer.pub_locations();
-        loop_rate.sleep();
-        ros::spinOnce();
-    }
+
+    ROS_INFO("Objects Detect and Localize Service Initialized!");
+    ros::spin();
     return 0;
 }
