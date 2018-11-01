@@ -51,11 +51,11 @@ class ObjectLocalizer
         {
             coordiante_camera_frame = coordinate / 1000;
         }
-        // get coordiante of object in map frame
+        // get coordiante of object in odom frame
         tf::TransformListener listener;
         tf::StampedTransform stampedtransform;
-        listener.waitForTransform("/map", "/camera_rgb_optical_frame", ros::Time::now(), ros::Duration(3.0));
-        listener.lookupTransform("/map", "/camera_rgb_optical_frame", ros::Time(0), stampedtransform);
+        listener.waitForTransform("/odom", "/camera_rgb_optical_frame", ros::Time::now(), ros::Duration(3.0));
+        listener.lookupTransform("/odom", "/camera_rgb_optical_frame", ros::Time(0), stampedtransform);
         tf::Transform transform;
         transform.setOrigin(tf::Vector3(coordiante_camera_frame.x, coordiante_camera_frame.y, coordiante_camera_frame.z));
         tf::Transform ntransform;
@@ -63,14 +63,14 @@ class ObjectLocalizer
         geometry_msgs::Point object_location;
         object_location.x = ntransform.getOrigin().x();
         object_location.y = ntransform.getOrigin().y();
-        object_location.z = ntransform.getOrigin().z(); // xyz is in /map frame
+        object_location.z = ntransform.getOrigin().z(); // xyz is in /odom frame
         return object_location;
     }
 
     bool marker_publish(turtle_pick::Objects objects_to_be_pub)
     {
         visualization_msgs::Marker marker;
-        marker.header.frame_id = "/map";
+        marker.header.frame_id = "/odom";
         marker.header.stamp = ros::Time();
         marker.ns = "detected_objects";
         marker.action = visualization_msgs::Marker::DELETEALL;
@@ -78,7 +78,7 @@ class ObjectLocalizer
         for (int i = 0; i < objects_to_be_pub.objects.size(); i++)
         {
             visualization_msgs::Marker marker;
-            marker.header.frame_id = "/map";
+            marker.header.frame_id = "/odom";
             marker.header.stamp = ros::Time();
             marker.ns = "detected_objects";
             marker.action = visualization_msgs::Marker::ADD;
@@ -128,8 +128,20 @@ class ObjectLocalizer
         check_for_objects_ac_.waitForResult();
         if (check_for_objects_ac_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
         {
-            darknet_ros_msgs::CheckForObjectsResult yolo_ac_result = *check_for_objects_ac_.getResult();
-            yolo_results_ = yolo_ac_result.bounding_boxes;
+            ros::Duration(2).sleep();
+            // darknet_ros_msgs::CheckForObjectsResult yolo_ac_result = *check_for_objects_ac_.getResult();
+            // use topic message instead of action result; action result has a weird delay
+            boost::shared_ptr<darknet_ros_msgs::BoundingBoxes const> sharedPtr;
+            sharedPtr = ros::topic::waitForMessage<darknet_ros_msgs::BoundingBoxes>("/darknet_ros/bounding_boxes", ros::Duration(10));
+            if (sharedPtr == NULL)
+            {
+                ROS_INFO("No Detection result received");
+                return false;
+            }
+            else
+                yolo_results_ = *sharedPtr;
+
+            // yolo_results_ = yolo_ac_result.bounding_boxes;
             detected_objects_.objects.resize(0);
             int size = yolo_results_.bounding_boxes.size();
             int pixel_x, pixel_y;

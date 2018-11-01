@@ -21,6 +21,7 @@ find_package(catkin REQUIRED
   darknet_ros_msgs
   message_generation
   actionlib
+  nav_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -117,7 +118,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES turtle_pick
    CATKIN_DEPENDS roscpp rospy std_msgs tf geometry_msgs tf2_ros tf2 visualization_msgs  
-                  image_geometry cv_bridge darknet_ros_msgs message_runtime actionlib
+                  image_geometry cv_bridge darknet_ros_msgs message_runtime actionlib nav_msgs
 #  DEPENDS system_lib
 )
 
