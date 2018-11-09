@@ -44,7 +44,29 @@ class ObjectLocalizer
         // get coordinate of object in camera frame
         cv::Point3d coordiante_camera_frame;
         cv::Point2d pixel_point(pixel_x, pixel_y);
-        float depth = depth_img_cv_->image.at<short int>(pixel_point);
+        float depth_sum = 0;
+        int index = 0;
+        float max_depth = 0, min_depth = 1000000;
+        for (int u = -1; u < 2; u++)
+        {
+            for (int v = -1; v < 2; v++)
+            {
+                cv::Point2d pixel_point(pixel_x + u, pixel_y + v);
+                float depth_current = depth_img_cv_->image.at<short int>(pixel_point);
+                if (depth_current > 0.01)
+                {
+                    index++;
+                    if (depth_current > max_depth)
+                        max_depth = depth_current;
+                    if (depth_current < min_depth)
+                        min_depth = depth_current;
+                    depth_sum = depth_sum + depth_current;
+                }
+            }
+        }
+        depth_sum = depth_sum - max_depth - min_depth;
+        float depth = depth_sum / float(index - 2);
+        ROS_INFO("total pixels: %d, depth %f", index, depth);
         cv::Point3d xyz = model1_.projectPixelTo3dRay(pixel_point);
         cv::Point3d coordinate = xyz * depth;
         if (depth > 0.01)
@@ -85,7 +107,7 @@ class ObjectLocalizer
             marker.pose.orientation.w = 1.0;
             marker.id = i;
             marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-            marker.scale.z = 0.2;
+            marker.scale.z = 0.05;
             marker.text = objects_to_be_pub.objects[i].Class;
             marker.pose.position = objects_to_be_pub.objects[i].position;
             // Points are green

@@ -4,14 +4,18 @@
 #include <numeric>
 
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <actionlib/client/simple_action_client.h>
 #include <actionlib/server/simple_action_server.h>
 #include <actionlib_msgs/GoalID.h>
 #include <move_base_msgs/MoveBaseAction.h>
 #include <geometry_msgs/Pose.h>
+#include <geometry_msgs/Twist.h>
+#include <sensor_msgs/JointState.h>
 #include <nav_msgs/Odometry.h>
 #include <cv_bridge/cv_bridge.h>
 #include "tf/transform_datatypes.h"
+#include <yaml-cpp/yaml.h>
 
 #include <turtle_pick/Object.h>
 #include <turtle_pick/Objects.h>
@@ -26,6 +30,21 @@ class ObjectPickup
         // depth_image_sub_ = nh_.subscribe("/camera/depth/image_raw", 10, &ObjectLocalizer::depthCB, this);
         localize_client_ = nh_.serviceClient<turtle_pick::DetectLocalize>("/object_localize/detect_and_localize");
         robot_pose_sub_ = nh_.subscribe("/odom", 1, &ObjectPickup::pose_callback, this);
+        arm_state_pub_ = nh_.advertise<sensor_msgs::JointState>("/turtlebot_arm/position_cmd", 10);
+        velocity_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel_mux/input/teleop", 10);
+        // read in parameters
+        std::string pkg_path = ros::package::getPath("turtle_pick");
+        std::string config_path = pkg_path + "/config/arm_position.yaml";
+        YAML::Node parameters = YAML::LoadFile(config_path);
+
+        default_ = parameters["default_position"].as<std::vector<double>>();
+        default_2_ = parameters["default_position_2"].as<std::vector<double>>();
+        upright_ = parameters["upright_position"].as<std::vector<double>>();
+        upright_2_ = parameters["upright_position_2"].as<std::vector<double>>();
+        hori_low_ = parameters["hori_pick_low"].as<std::vector<double>>();
+        hori_high_ = parameters["hori_pick_high"].as<std::vector<double>>();
+        hori_low_close_ = parameters["hori_pick_low_close"].as<std::vector<double>>();
+        hori_high_close_ = parameters["hori_pick_high_close"].as<std::vector<double>>();
     }
 
     // void depthCB(const sensor_msgs::ImageConstPtr &msg)
@@ -57,8 +76,30 @@ class ObjectPickup
         return orientation_quaternion;
     }
 
+    void move_arm(std::vector<double> position, std::vector<double> velocity)
+    {
+        ROS_INFO("Moving arm");
+        sensor_msgs::JointState goal;
+        //goal.header.stamp = ros::Time::now();
+        goal.name.push_back("joint_1");
+        goal.name.push_back("joint_2");
+        goal.name.push_back("joint_3");
+        goal.name.push_back("joint_4");
+        goal.name.push_back("gripper");
+        goal.position.resize(position.size());
+        goal.velocity.resize(velocity.size());
+        goal.position = position;
+        goal.velocity = velocity;
+        arm_state_pub_.publish(goal);
+        ros::spinOnce();
+        ros::Duration(5).sleep();
+        ROS_INFO("Moving arm2");
+    }
+
     bool get_location()
     {
+        // reset arm position
+        this->move_arm(default_, {50, 50, 50, 50, 50});
         // localize_srv_.request.depth_image = depth_image_;
         // localize_srv_.request.rgb_image = rgb_image_;
         if (localize_client_.call(localize_srv_))
@@ -82,12 +123,12 @@ class ObjectPickup
         }
         else
         {
-            ROS_INFO("Failed call Detect&Localize service...");
+            ROS_INFO("Detection & Localization Failed...");
             return false;
         }
     }
 
-    void pick_up(int index)
+    bool pick_up(int index)
     {
         move_base_msgs::MoveBaseGoal move_goal;
         float distance_x = detected_objects_.objects[index - 1].position.x - robot_x_;
@@ -97,8 +138,8 @@ class ObjectPickup
         float normal_y = distance_y / mag;
         move_goal.target_pose.header.frame_id = "/odom";
         move_goal.target_pose.header.stamp = ros::Time::now();
-        move_goal.target_pose.pose.position.x = detected_objects_.objects[index - 1].position.x - normal_x*0.5;
-        move_goal.target_pose.pose.position.y = detected_objects_.objects[index - 1].position.y - normal_y*0.5;
+        move_goal.target_pose.pose.position.x = detected_objects_.objects[index - 1].position.x - normal_x * 0.5;
+        move_goal.target_pose.pose.position.y = detected_objects_.objects[index - 1].position.y - normal_y * 0.5;
         double normal[3] = {normal_x, normal_y, 0};
         move_goal.target_pose.pose.orientation = this->calculate_quaternion(normal);
         ROS_INFO("move_base goal %f, %f ", move_goal.target_pose.pose.position.x, move_goal.target_pose.pose.position.y);
@@ -111,21 +152,41 @@ class ObjectPickup
         move_base_ac_.waitForResult();
         if (move_base_ac_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
         {
-            // TODO: Pick up
             ROS_INFO("Arrive");
+            geometry_msgs::Twist tw;
+            tw.linear.x = 0.1;
+            std::vector<double> velocity{50, 50, 50, 50, 50};
+            this->move_arm(default_2_, velocity);
+            this->move_arm(hori_high_, velocity);
+            ros::Time endTime = ros::Time::now() + ros::Duration(3);
+            while (ros::Time::now() < endTime)
+            {
+                velocity_pub_.publish(tw);
+            }
+            this->move_arm(hori_high_close_, velocity);
+            this->move_arm(default_2_, velocity);
+            this->move_arm(default_, velocity);
         }
+        else
+        {
+            ROS_INFO("Cannot not navigation to object...");
+            return false;
+        }
+        return true;
     }
 
   private:
     ros::NodeHandle nh_;
     ros::ServiceClient localize_client_;
     ros::Subscriber robot_pose_sub_;
+    ros::Publisher arm_state_pub_, velocity_pub_;
     // sensor_msgs::Image rgb_image_, depth_image_;
 
     turtle_pick::Objects detected_objects_;
     turtle_pick::DetectLocalize localize_srv_;
     float robot_x_, robot_y_;
     actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> move_base_ac_;
+    std::vector<double> default_, default_2_, upright_, upright_2_, hori_low_, hori_high_, hori_low_close_, hori_high_close_;
 };
 
 int main(int argc, char **argv)
@@ -135,12 +196,12 @@ int main(int argc, char **argv)
     ros::NodeHandle n("~");
 
     ObjectPickup object_pickup(n);
-    // ros:spinOnce();
-
+    ros::Duration(2).sleep();
+    //ros::spin();
     if (object_pickup.get_location())
     {
-        std::cin >> index;
-        object_pickup.pick_up(index);
+       std::cin >> index;
+    object_pickup.pick_up(index);
     }
     return 0;
 }

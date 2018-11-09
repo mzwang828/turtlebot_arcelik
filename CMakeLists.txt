@@ -13,8 +13,7 @@ find_package(catkin REQUIRED
   std_msgs
   tf
   geometry_msgs
-  tf2_ros
-  tf2
+  sensor_msgs
   visualization_msgs  
   image_geometry
   cv_bridge 
@@ -22,6 +21,7 @@ find_package(catkin REQUIRED
   message_generation
   actionlib
   nav_msgs
+  roslib
 )
 
 ## System dependencies are found with CMake's conventions
@@ -117,8 +117,8 @@ find_package(catkin REQUIRED
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES turtle_pick
-   CATKIN_DEPENDS roscpp rospy std_msgs tf geometry_msgs tf2_ros tf2 visualization_msgs  
-                  image_geometry cv_bridge darknet_ros_msgs message_runtime actionlib nav_msgs
+   CATKIN_DEPENDS roscpp rospy std_msgs tf geometry_msgs visualization_msgs sensor_msgs
+                  image_geometry cv_bridge darknet_ros_msgs message_runtime actionlib nav_msgs roslib
 #  DEPENDS system_lib
 )
 
@@ -166,6 +166,7 @@ include_directories(
  )
  target_link_libraries(object_pickup
    ${catkin_LIBRARIES}
+   yaml-cpp
  )
 
 

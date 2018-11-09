@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/mzwang/catkin_ws/src/turtle_pick/build/devel/setup.sh
