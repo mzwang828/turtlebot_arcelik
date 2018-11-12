@@ -64,6 +64,9 @@
   <build_depend>common_rosdeps</build_depend>
   <build_depend>roslib</build_depend>
   <build_depend>sensor_msgs</build_depend>
+  <build_depend>dialogflow_ros</build_depend>
+
+
 
   <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
@@ -80,6 +83,7 @@
   <exec_depend>common_rosdeps</exec_depend>
   <exec_depend>roslib</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>dialogflow_ros</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

@@ -22,6 +22,7 @@ find_package(catkin REQUIRED
   actionlib
   nav_msgs
   roslib
+  dialogflow_ros
 )
 
 ## System dependencies are found with CMake's conventions

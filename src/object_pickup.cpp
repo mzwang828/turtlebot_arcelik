@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <numeric>
+#include <algorithm>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -20,6 +21,7 @@
 #include <turtle_pick/Object.h>
 #include <turtle_pick/Objects.h>
 #include <turtle_pick/DetectLocalize.h>
+#include <dialogflow_ros/DialogflowResult.h>
 
 class ObjectPickup
 {
@@ -93,11 +95,11 @@ class ObjectPickup
         arm_state_pub_.publish(goal);
         ros::spinOnce();
         ros::Duration(5).sleep();
-        ROS_INFO("Moving arm2");
     }
 
     bool get_location()
     {
+        detected_objects_.objects.clear();
         // reset arm position
         this->move_arm(default_, {50, 50, 50, 50, 50});
         // localize_srv_.request.depth_image = depth_image_;
@@ -130,6 +132,8 @@ class ObjectPickup
 
     bool pick_up(int index)
     {
+        ROS_INFO_STREAM("Ok, I'll pick up the " << detected_objects_.objects[index - 1].Class);
+        /*
         move_base_msgs::MoveBaseGoal move_goal;
         float distance_x = detected_objects_.objects[index - 1].position.x - robot_x_;
         float distance_y = detected_objects_.objects[index - 1].position.y - robot_y_;
@@ -171,8 +175,75 @@ class ObjectPickup
         {
             ROS_INFO("Cannot not navigation to object...");
             return false;
-        }
+        }*/
         return true;
+    }
+
+    int get_index(turtle_pick::Objects objects, std::string object)
+    {
+        std::vector<std::string> objects_list;
+        objects_list.clear();
+        for (int i; i < objects.objects.size(); i++)
+        {
+            objects_list.push_back(objects.objects[i].Class);
+        }
+        auto it = std::find(objects_list.begin(), objects_list.end(), object);
+        if (it == objects_list.end())
+        {
+            ROS_INFO("Couldn't find. Repeat");
+            return -1;
+        }
+        else
+        {
+            auto index = std::distance(objects_list.begin(), it);
+            return (index+1);
+        }
+    }
+
+    void dialogflow_watcher()
+    {
+        ROS_INFO("Waiting for voice command...");
+        boost::shared_ptr<dialogflow_ros::DialogflowResult const> sharedPtr;
+        sharedPtr = ros::topic::waitForMessage<dialogflow_ros::DialogflowResult>("/dialogflow_client/results", ros::Duration(20));
+        if (sharedPtr == NULL)
+        {
+            ROS_INFO("No Voice Command Received");
+            return;
+        }
+        else
+            voice_command_ = *sharedPtr;
+
+        if (voice_command_.action.compare("objects_found") == 0)
+        {
+            ROS_INFO("Command Received: Detecting & Localizing...");
+            this->get_location();
+            while (true)
+            {
+                sharedPtr = ros::topic::waitForMessage<dialogflow_ros::DialogflowResult>("/dialogflow_client/results", ros::Duration(20));
+                if (sharedPtr == NULL)
+                {
+                    ROS_INFO("No Voice Command Received");
+                    return;
+                }
+                else
+                    voice_command_ = *sharedPtr;
+                int index = this->get_index(detected_objects_, voice_command_.parameters[0].value);
+                if (index != -1)
+                {
+                    ROS_INFO("Command Received: Picking...");
+                    this->pick_up(index);
+                    break;
+                }
+                else
+                    continue;
+            }
+        }
+        else
+        {
+            ROS_INFO("I don't understand...");
+        }
+        ROS_INFO("DONE");
+        return;
     }
 
   private:
@@ -180,7 +251,7 @@ class ObjectPickup
     ros::ServiceClient localize_client_;
     ros::Subscriber robot_pose_sub_;
     ros::Publisher arm_state_pub_, velocity_pub_;
-    // sensor_msgs::Image rgb_image_, depth_image_;
+    dialogflow_ros::DialogflowResult voice_command_;
 
     turtle_pick::Objects detected_objects_;
     turtle_pick::DetectLocalize localize_srv_;
@@ -197,11 +268,13 @@ int main(int argc, char **argv)
 
     ObjectPickup object_pickup(n);
     ros::Duration(2).sleep();
-    //ros::spin();
-    if (object_pickup.get_location())
-    {
-       std::cin >> index;
-    object_pickup.pick_up(index);
-    }
+    // if (object_pickup.get_location())
+    // {
+    //     std::cin >> index;
+    //     object_pickup.pick_up(index);
+    // }
+
+    object_pickup.dialogflow_watcher();
+
     return 0;
 }
