@@ -1,0 +1,10 @@
+default_position: [966.0, 132.0, 751.0, 476.0]
+default_position_2: [926.0, 239.0, 666.0, 632.0]
+hori_pick_high: [500.0, 88.0, 616.0, 643.0]
+hori_pick_high_close: [500.0, 88.0, 616.0, 400]
+
+upright_position: [512,512,512,512,512]
+upright_position_2: [512,512,850,512,512]
+pick_position_low: [512,150,750,512,512]
+pick_position_close: [512,150,750,512,400]
+pick_position_high: [512,250,850,512,512]
