@@ -43,9 +43,7 @@ class ObjectPickup
         default_2_ = parameters["default_position_2"].as<std::vector<double>>();
         upright_ = parameters["upright_position"].as<std::vector<double>>();
         upright_2_ = parameters["upright_position_2"].as<std::vector<double>>();
-        hori_low_ = parameters["hori_pick_low"].as<std::vector<double>>();
         hori_high_ = parameters["hori_pick_high"].as<std::vector<double>>();
-        hori_low_close_ = parameters["hori_pick_low_close"].as<std::vector<double>>();
         hori_high_close_ = parameters["hori_pick_high_close"].as<std::vector<double>>();
     }
 
@@ -133,7 +131,6 @@ class ObjectPickup
     bool pick_up(int index)
     {
         ROS_INFO_STREAM("Ok, I'll pick up the " << detected_objects_.objects[index - 1].Class);
-        /*
         move_base_msgs::MoveBaseGoal move_goal;
         float distance_x = detected_objects_.objects[index - 1].position.x - robot_x_;
         float distance_y = detected_objects_.objects[index - 1].position.y - robot_y_;
@@ -142,8 +139,8 @@ class ObjectPickup
         float normal_y = distance_y / mag;
         move_goal.target_pose.header.frame_id = "/odom";
         move_goal.target_pose.header.stamp = ros::Time::now();
-        move_goal.target_pose.pose.position.x = detected_objects_.objects[index - 1].position.x - normal_x * 0.5;
-        move_goal.target_pose.pose.position.y = detected_objects_.objects[index - 1].position.y - normal_y * 0.5;
+        move_goal.target_pose.pose.position.x = detected_objects_.objects[index - 1].position.x - normal_x * 0.4;
+        move_goal.target_pose.pose.position.y = detected_objects_.objects[index - 1].position.y - normal_y * 0.4;
         double normal[3] = {normal_x, normal_y, 0};
         move_goal.target_pose.pose.orientation = this->calculate_quaternion(normal);
         ROS_INFO("move_base goal %f, %f ", move_goal.target_pose.pose.position.x, move_goal.target_pose.pose.position.y);
@@ -175,7 +172,7 @@ class ObjectPickup
         {
             ROS_INFO("Cannot not navigation to object...");
             return false;
-        }*/
+        }
         return true;
     }
 

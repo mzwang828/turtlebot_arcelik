@@ -1,7 +1,0 @@
-<launch>
-  <node pkg="joint_state_publisher" type="joint_state_publisher" name="joint_state_publisher" output="screen">
-    <param name="use_gui"          value="True" />
-    <rosparam param="source_list">["/turtlebot_arm/position_cmd"]</rosparam>
-  </node>
-
-</launch>

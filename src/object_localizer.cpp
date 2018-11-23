@@ -123,6 +123,7 @@ class ObjectLocalizer
                             turtle_pick::DetectLocalize::Response &res)
     {
         // get latest rgb image and depth image
+        ROS_INFO("Service Called, Start Localizing");
         boost::shared_ptr<sensor_msgs::Image const> sharedPtr;
         sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/rgb/image_raw", ros::Duration(10));
         if (sharedPtr == NULL)
@@ -132,7 +133,7 @@ class ObjectLocalizer
         }
         else
             rgb_image_ = *sharedPtr;
-        sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/depth/image_raw", ros::Duration(10));
+        sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/depth_registered/image_raw", ros::Duration(10));
         if (sharedPtr == NULL)
         {
             ROS_INFO("No depth image received");
@@ -146,6 +147,10 @@ class ObjectLocalizer
         // call YOLO action and localize detection results
         darknet_ros_msgs::CheckForObjectsGoal yolo_ac_goal;
         yolo_ac_goal.image = rgb_image_;
+        while (!check_for_objects_ac_.waitForServer(ros::Duration(5.0)))
+        {
+            ROS_INFO("Waiting for the YOLO action server to come up");
+        }
         check_for_objects_ac_.sendGoal(yolo_ac_goal);
         check_for_objects_ac_.waitForResult();
         if (check_for_objects_ac_.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)

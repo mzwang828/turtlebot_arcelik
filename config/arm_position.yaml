@@ -1,9 +1,7 @@
-default_position: [950,350,950,862,439]
-default_position_2: [950,400,950,862,439]
-hori_pick_low: [510, 55, 652, 777, 643]
-hori_pick_high: [510,320,922,796,643]
-hori_pick_low_close: [510, 55, 652, 777, 400]
-hori_pick_high_close: [510, 320, 922, 796, 400]
+default_position: [966.0, 132.0, 751.0, 476.0]
+default_position_2: [926.0, 239.0, 666.0, 632.0]
+hori_pick_high: [500.0, 88.0, 616.0, 643.0]
+hori_pick_high_close: [500.0, 88.0, 616.0, 400]
 
 upright_position: [512,512,512,512,512]
 upright_position_2: [512,512,850,512,512]
