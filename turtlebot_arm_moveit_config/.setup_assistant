@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: turtlebot_description
+    relative_path: robots/kobuki_hexagons_kinect.urdf.xacro
+    xacro_args: "--inorder "
+  SRDF:
+    relative_path: config/turtlebot.srdf
+  CONFIG:
+    author_name: mzwang
+    author_email: xxx@xxx.xxx
+    generated_timestamp: 1542887470
