@@ -73,9 +73,10 @@ class ObjectLocalizer
         {
             coordiante_camera_frame = coordinate / 1000;
         }
-        // get coordiante of object in odom frame
+        // get coordiante of object in goal frame
         tf::TransformListener listener;
         tf::StampedTransform stampedtransform;
+        // transform to odom frame
         listener.waitForTransform("/odom", "/camera_rgb_optical_frame", ros::Time::now(), ros::Duration(3.0));
         listener.lookupTransform("/odom", "/camera_rgb_optical_frame", ros::Time(0), stampedtransform);
         tf::Transform transform;
@@ -85,7 +86,7 @@ class ObjectLocalizer
         geometry_msgs::Point object_location;
         object_location.x = ntransform.getOrigin().x();
         object_location.y = ntransform.getOrigin().y();
-        object_location.z = ntransform.getOrigin().z(); // xyz is in /odom frame
+        object_location.z = ntransform.getOrigin().z(); // xyz is in goal frame
         return object_location;
     }
 
@@ -133,7 +134,7 @@ class ObjectLocalizer
         }
         else
             rgb_image_ = *sharedPtr;
-        sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/depth_registered/image_raw", ros::Duration(10));
+        sharedPtr = ros::topic::waitForMessage<sensor_msgs::Image>("/camera/depth/image_raw", ros::Duration(10));
         if (sharedPtr == NULL)
         {
             ROS_INFO("No depth image received");

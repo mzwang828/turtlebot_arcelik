@@ -1,0 +1,6 @@
+<launch>
+
+  <include file="$(find darknet_ros)/launch/my_darknet_ros.launch"/>
+  <include file="$(find dialogflow_ros)/launch/hot_world.launch"/>
+	
+</launch>

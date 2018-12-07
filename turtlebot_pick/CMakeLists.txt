@@ -23,7 +23,14 @@ find_package(catkin REQUIRED
   nav_msgs
   roslib
   dialogflow_ros
+  moveit_core
+  moveit_visual_tools
+  moveit_ros_planning
+  moveit_ros_planning_interface
+  tf2_ros
+  tf2_geometry_msgs
 )
+
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -120,6 +127,7 @@ catkin_package(
 #  LIBRARIES turtle_pick
    CATKIN_DEPENDS roscpp rospy std_msgs tf geometry_msgs visualization_msgs sensor_msgs
                   image_geometry cv_bridge darknet_ros_msgs message_runtime actionlib nav_msgs roslib
+                  moveit_core moveit_visual_tools moveit_ros_planning_interface tf2_ros tf2_geometry_msgs
 #  DEPENDS system_lib
 )
 
@@ -149,6 +157,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
  add_executable(object_localizer src/object_localizer.cpp)
  add_executable(object_pickup src/object_pickup.cpp)
+ add_executable(moveit_test src/moveit_test.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -160,6 +169,7 @@ include_directories(
 ## same as for the library above
   add_dependencies(object_localizer ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
   add_dependencies(object_pickup ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+  add_dependencies(moveit_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
  target_link_libraries(object_localizer
@@ -168,6 +178,9 @@ include_directories(
  target_link_libraries(object_pickup
    ${catkin_LIBRARIES}
    yaml-cpp
+ )
+ target_link_libraries(moveit_test
+   ${catkin_LIBRARIES}
  )
 
 
